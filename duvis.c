@@ -221,74 +221,51 @@ int compare_subtrees(const void *p1, const void * p2) {
 }
 
 /*
- *  A helper function that finds the correct offset index for
- *  build_tree_postorder()
- */
-int findOffset(int n1, int n2)
-{
-    uint32_t offset = 0;
-
-    if(n1 <= 1 || n2 <= 1)
-        return 0;
-
-    if(n1 < n2) // next is a new path
-	offset = (n1 -1);
-    else // n1 > n2 - next is a child
-	offset = (n2 - 1);
-
-    return offset;
-}
-
-/*
  * Build a tree in the entry structure. This implementation
  * utilizes post-order traversal and takes advantage of the
  * existing du sorted output - assumes user wants du output
  */
  
 void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
-
-    struct entry *e = &entries[end];
+    
+    /* Set up for calculation */
+    struct entry *e = &entries[start];
     uint32_t offset = depth + base_depth;
 
-    if(e->n_components != offset) {
-        fprintf(stderr, "Index %d: unexpected entry\n", end);
-    }
+    e->depth = e->n_components - 1;
 
-    e->depth = depth;
-
-    uint32_t i = end;
-
-    /* Count and allocate direct children */
-    while(--i)
-        if(entries[i].n_components == offset + 1 
-            && !strcmp(e->components[offset-1], entries[i].components[offset-1]))
+    /* Allocate direct children of e */
+    for(int i = start + 1; i < end; i++)
+        if(entries[i].n_components == offset + 1)   
             e->n_children++;
 
     e->children = malloc(e->n_children * sizeof(e->children[0]));
+    if (!e->children) {
+        perror("malloc");
+        exit(1);
+    }
 
     /* Fill direct children and build subtree */
     int n_children = 0;
-    i = end;
+    int i = start + 1;
 
-    while (--i > start) {
-
+    while(i < end) {
+        
         e->children[n_children++] = &entries[i];
         entries[i].depth = depth + 1;
 
-        uint32_t j = i;
+        int j = i + 1;
 
-        while (--j > start && entries[j].n_components > offset + 1
-                    && !strcmp(entries[i].components[offset], 
-                               entries[j].components[offset])) 
-        {
-        }
+        while(j < end && entries[j].n_components > offset + 1 &&
+              !strcmp(entries[i].components[offset], 
+                      entries[j].components[offset])) 
+            j++;
+        if(j > i + 1)
+            build_tree_postorder(i, j, depth + 1);
 
-	// Start building a new subtree
-	if (i > j + 1)
-	    build_tree_postorder(j, i, depth + 1);
-
-	i = j + 1;
+        i = j;
     }
+
 }
 
 /*
