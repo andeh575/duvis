@@ -412,8 +412,12 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
     /* Length of 2**64 - 1, +1 for null */
     char sizeStr[21];
 
-    int txtX = width / 4; 
+    /* Center the text in this rectangle */
+    
+    int txtX = width / 2; 
     int txtY = height / 2;
+
+    printf("%d %d %d %d\n", txtX, txtY, width, height);
 
     /* Copy uint64_t into char buffer */
     sprintf(sizeStr, "%" PRIu64, e->size);
@@ -437,9 +441,9 @@ static void do_drawing(GtkWidget *widget, cairo_t *cr) {
     GtkAllocation *allocation = g_new0 (GtkAllocation, 1);
     gtk_widget_get_allocation(GTK_WIDGET(widget), allocation);
 
-    /* Make sure that cairo is aware of the dimensions */
-    double width = allocation->width;
-    double height = allocation->height;
+    /* Make sure that cairo is aware of the dimensions of the drawing surface */
+    double winWidth = allocation->width;
+    double winHeight = allocation->height;
 
     /* Allocation no longer needed */
     g_free(allocation);
@@ -452,7 +456,26 @@ static void do_drawing(GtkWidget *widget, cairo_t *cr) {
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
     
     /* Begin drawing the nodes */
-    draw_node(cr, &entries[0], 0, 0, width, height); 
+    
+    int recW = 0;
+    int recH = 0;
+    int width = (int)(winWidth / n_entries);
+    int baseHeight = (int)entries[0].size;
+    int height = winHeight;
+
+    float mod = 0;
+
+    draw_node(cr, &entries[0], recW, recH, width, height);
+
+    for (int i = 1; i < n_entries; i++)
+    {
+        printf("%d %d\n", baseHeight, (int)entries[i].size);
+        mod = ((int)entries[i].size / baseHeight);
+        printf("%f\n", mod);
+        recW += width;
+        height = winHeight * (entries[i].size / baseHeight);
+        draw_node(cr, &entries[i], recW, recH, width, height);
+    }
 }
 
 /* Call up the cairo functionality */
