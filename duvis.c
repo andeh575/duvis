@@ -365,31 +365,6 @@ void status(char *msg) {
 } 
 
 /*
- *  Helper/testing function for displaying detailed information 
- *  about the entries that have been read in from du.
- */
-void dispEntryDetail (struct entry e[], int n) { 
-    printf("Detail of Entries\n# of Entries: %d\n\n", n);
-
-    for(int i = 0; i < n; i++) {
-        printf("Index: %d\n", i);
-        printf("Size: %" PRIu64 "\n", e[i].size);	
-        printf("Depth: %d\n", e[i].depth);
-        printf("# Children: %d\n", e[i].n_children);
-        printf("# Components: %d\n", e[i].n_components);
-        printf("Components: \n");
-
-        if(e[i].n_components) {
-            for(int j = 0; j < e[i].n_components; j++) {
-                printf("%s\n", e[i].components[j]);
-            }
-        }
-
-        printf("\n");
-    }
-}
-
-/*
  *  Helper/testing function for displaying a simplified order
  *  that entries are currently in - formatted for directory
  *  view. Includes information about the size.
@@ -413,11 +388,8 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
     char sizeStr[21];
 
     /* Center the text in this rectangle */
-    
-    int txtX = width / 2; 
-    int txtY = height / 2;
-
-    printf("%d %d %d %d\n", txtX, txtY, width, height);
+    int txtX = x + width / 2; 
+    int txtY = y + height / 2;
 
     /* Copy uint64_t into char buffer */
     sprintf(sizeStr, "%" PRIu64, e->size);
@@ -428,10 +400,38 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
 
     /* Draw the label */
     cairo_move_to(cr, txtX, txtY);
-    cairo_show_text(cr, e->components[0]);
+    cairo_show_text(cr, e->components[e->n_components - 1]);
     cairo_show_text(cr, " (");
     cairo_show_text(cr, sizeStr);
     cairo_show_text(cr, ")");
+}
+
+static void draw_nodes(cairo_t *cr, struct entry *e, int recW, 
+                       int recH, double winWidth, double winHeight)
+{
+    uint32_t depth = e->depth;
+    float mod = 1;
+    int width = 0;
+    int height = winHeight;
+    float baseHeight = e->size;
+
+    if(depth == 0) {
+        width = (int)((float)winWidth / n_entries);
+        baseHeight = e->size;
+        height = winHeight;
+        draw_node(cr, e, recW, recH, width, height);
+    }
+    else {
+        mod = e->size / baseHeight;
+        height = winHeight * mod;
+        draw_node(cr, e, recW, recH, width, height);
+    }
+
+    recW += width;
+    for(int i = 0; i < e->n_children; i++) {
+        draw_nodes(cr, e->children[i], recW, recH, width, height);
+        recH += height;
+    }
 }
 
 /* Perform the actual drawing of the entries */
@@ -451,31 +451,12 @@ static void do_drawing(GtkWidget *widget, cairo_t *cr) {
     /* Set cairo drawing variables */
     cairo_set_source_rgb(cr, 0, 0, 0);
     cairo_select_font_face(cr, "Helvetica", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 20);
+    cairo_set_font_size(cr, 10);
     cairo_set_line_width(cr, 1);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
-    
-    /* Begin drawing the nodes */
-    
-    int recW = 0;
-    int recH = 0;
-    int width = (int)(winWidth / n_entries);
-    int baseHeight = (int)entries[0].size;
-    int height = winHeight;
 
-    float mod = 0;
-
-    draw_node(cr, &entries[0], recW, recH, width, height);
-
-    for (int i = 1; i < n_entries; i++)
-    {
-        printf("%d %d\n", baseHeight, (int)entries[i].size);
-        mod = ((int)entries[i].size / baseHeight);
-        printf("%f\n", mod);
-        recW += width;
-        height = winHeight * (entries[i].size / baseHeight);
-        draw_node(cr, &entries[i], recW, recH, width, height);
-    }
+    /* draw the nodes, starting with the root */
+    draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight);     
 }
 
 /* Call up the cairo functionality */
@@ -484,12 +465,6 @@ static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data
     do_drawing(widget, cr);
 
     return FALSE;
-}
-
-/* Determine the size of the window */
-void getSize(GtkWidget *widget, GtkAllocation *allocation, void *data) {
-
-    printf("width = %d, height = %d\n", allocation->width, allocation->height);
 }
 
 /* Initialize the window, drawing surface, and functionality */
@@ -509,7 +484,6 @@ int gui(int argv, char **argc) {
     /* Functionality handling - drawing and exiting */
     g_signal_connect(G_OBJECT(darea), "draw", G_CALLBACK(on_draw_event), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-    g_signal_connect(G_OBJECT(darea), "size-allocate", G_CALLBACK(getSize), NULL);
 
     /* Default window settings */
     gtk_window_set_title(GTK_WINDOW(window), "Duvis");
