@@ -231,7 +231,6 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
     /* Set up for calculation */
     struct entry *e = &entries[start];
     uint32_t offset = depth - 1;
-    printf("Started new subtree, off: %d\n", offset);
 
     e->depth = depth;
 
@@ -254,7 +253,6 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
             j++;
         }
 
-        printf("i: %d, j: %d\n", i, j);
         if(j > i + 1)
             build_tree_postorder(i, j, entries[j].n_components - 1);
    
@@ -415,8 +413,8 @@ static void draw_nodes(cairo_t *cr, struct entry *e, int recW,
     int height = winHeight;
     float parSize = pSize;
 
+    /* Computing the root node initializes the rest of this algorithm */
     if(depth == 0) {
-        //width = (int)((float)winWidth / n_entries);
         width = 100;
         parSize = e->size;
         height = winHeight;
@@ -425,14 +423,20 @@ static void draw_nodes(cairo_t *cr, struct entry *e, int recW,
     else {
         mod = e->size / parSize;
         height = winHeight * mod;
-        printf("child height: %d\n", height);
         draw_node(cr, e, recW, recH, width, height);
     }
 
     recW += width;
+    int tempHeight = 0;
+
+    /* Start drawing children */
     for(int i = 0; i < e->n_children; i++) {
         draw_nodes(cr, e->children[i], recW, recH, width, height, parSize);
-        recH += height;
+        
+        /* Height Coordinate of next child */
+        mod = e->children[i]->size / parSize;
+        tempHeight = winHeight * mod;
+        recH += tempHeight;
     }
 }
 
