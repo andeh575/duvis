@@ -407,29 +407,31 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
 }
 
 static void draw_nodes(cairo_t *cr, struct entry *e, int recW, 
-                       int recH, double winWidth, double winHeight)
+                       int recH, double winWidth, double winHeight, float pSize)
 {
     uint32_t depth = e->depth;
     float mod = 1;
-    int width = 0;
+    int width = winWidth;
     int height = winHeight;
-    float baseHeight = e->size;
+    float parSize = pSize;
 
     if(depth == 0) {
-        width = (int)((float)winWidth / n_entries);
-        baseHeight = e->size;
+        //width = (int)((float)winWidth / n_entries);
+        width = 100;
+        parSize = e->size;
         height = winHeight;
         draw_node(cr, e, recW, recH, width, height);
     }
     else {
-        mod = e->size / baseHeight;
+        mod = e->size / parSize;
         height = winHeight * mod;
+        printf("child height: %d\n", height);
         draw_node(cr, e, recW, recH, width, height);
     }
 
     recW += width;
     for(int i = 0; i < e->n_children; i++) {
-        draw_nodes(cr, e->children[i], recW, recH, width, height);
+        draw_nodes(cr, e->children[i], recW, recH, width, height, parSize);
         recH += height;
     }
 }
@@ -455,8 +457,11 @@ static void do_drawing(GtkWidget *widget, cairo_t *cr) {
     cairo_set_line_width(cr, 1);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
 
+    /* Keep track of parent size to properly scale children */
+    float pSize = (float)entries[0].size;
+
     /* draw the nodes, starting with the root */
-    draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight);     
+    draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight, pSize);     
 }
 
 /* Call up the cairo functionality */
