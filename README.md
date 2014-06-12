@@ -40,6 +40,11 @@ only the last component shown except at the root, indented
 according to nesting depth, and sorted at each level by
 decreasing size, with ties broken alphabetically.
 
+## Options
+
+1. -p    Output in preorder format
+2. -g    Output to `xdu` style graphical user interface
+
 ## Dependencies
 
 In order to properly display any graphical portion of `duvis`
@@ -48,7 +53,7 @@ it it necessary to install the following packages:
 1. GTK+-3.0: libgtk-3-dev
 2. Cairo: cairo2-dev
 
-GTK is the backend utilized by Cairo to draw all graphics.
+`GTK` is the backend utilized by `Cairo` to draw all graphics.
 
 ## License
 
