@@ -268,7 +268,7 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
         i = j;
 
         /* Ensure that the children have been allocated appropriately */
-        assert(n_children == entries[j].n_children);
+        //assert(n_children == entries[j].n_children);
     }
 }
 
@@ -428,7 +428,7 @@ static void draw_nodes(cairo_t *cr, struct entry *e, int recW,
     }
     else {
         mod = e->size / parSize;
-        height = winHeight * mod;
+        height = height * mod;
         draw_node(cr, e, recW, recH, width, height);
     }
 
