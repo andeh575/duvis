@@ -241,8 +241,6 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
         
         int j = i + 1;
   
-        //entries[i].depth = depth - 1;
-        //entries[i].n_children = 1;
         offset = entries[i].n_components - 2;
 
         /* Go to the end of this subtree */
@@ -250,7 +248,6 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
                 !strcmp(entries[i].components[offset], 
                         entries[j].components[offset]))
         {
-            printf("inner\n");
             entries[j].n_children++;
             j++;
         }
@@ -270,9 +267,8 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
 
         i = j;
 
-        printf("nc: %d, jc: %d\n", n_children, entries[j].n_children);
         /* Ensure that the children have been allocated appropriately */
-        //assert(n_children == entries[j].n_children);
+        assert(n_children == entries[j].n_children);
     }
 }
 
