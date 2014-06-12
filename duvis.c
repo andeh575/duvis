@@ -230,42 +230,49 @@ void build_tree_postorder(uint32_t start, uint32_t end, uint32_t depth) {
     
     /* Set up for calculation */
     struct entry *e = &entries[start];
-    uint32_t offset = depth - 1;
+    uint32_t offset = 0;
 
     e->depth = depth;
+    e->n_children = 0;
 
-    /* Fill direct children and build subtree */
+    /* Find a subtree */
     int i = start;
-
     while(i < end) {
         
         int j = i + 1;
+  
+        //entries[i].depth = depth - 1;
+        //entries[i].n_children = 1;
+        offset = entries[i].n_components - 2;
 
-        entries[j].depth = depth - 1;
-        entries[j].n_children = 0;
-        offset = entries[i].n_components - 1;
-
-        while(j < end && entries[j].n_components < offset - 1 &&
-              strcmp(entries[i].components[offset], 
-                     entries[j].components[offset]))
+        /* Go to the end of this subtree */
+        while(j < end && entries[j].n_components < offset &&
+                !strcmp(entries[i].components[offset], 
+                        entries[j].components[offset]))
         {
+            printf("inner\n");
             entries[j].n_children++;
             j++;
         }
 
+        /* If we found a subtree then let's build it */
         if(j > i + 1)
-            build_tree_postorder(i, j, entries[j].n_components - 1);
+            build_tree_postorder(i + 1,  j, entries[i].n_components - 1);
    
+        /* Allocate memory for children */
         entries[j].children = malloc(entries[j].n_children * sizeof(entries[j].children[0]));
     
+        /* Fill direct children */
         int n_children = 0;
-        for(int k = j - 1; k > i; k--)
-            if(entries[k].n_components == offset + 1)
+        for(int k = i; k < j; k++)
+            if(entries[k].n_components == offset + 2)
                 entries[j].children[n_children++] = &entries[k];
 
         i = j;
 
-        assert(n_children == entries[j].n_children);
+        printf("nc: %d, jc: %d\n", n_children, entries[j].n_children);
+        /* Ensure that the children have been allocated appropriately */
+        //assert(n_children == entries[j].n_children);
     }
 }
 
@@ -462,10 +469,19 @@ static void do_drawing(GtkWidget *widget, cairo_t *cr) {
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
 
     /* Keep track of parent size to properly scale children */
-    float pSize = (float)entries[0].size;
+    float pSize = 0;
 
-    /* draw the nodes, starting with the root */
-    draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight, pSize);     
+    /* Draw entries, starting with the root node - depends on sort */
+    if(entries[0].size > entries[n_entries - 1].size)
+    {
+        pSize = (float)entries[0].size;
+        draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight, pSize);
+    }
+    else
+    {
+        pSize = (float)entries[n_entries - 1].size;       
+        draw_nodes(cr, &entries[n_entries - 1], 0, 0, winWidth, winHeight, pSize);     
+    }
 }
 
 /* Call up the cairo functionality */
@@ -513,20 +529,20 @@ int main(int argc, char **argv) {
 
     while((c = getopt(argc, argv, "pg")) != -1)
     {
-	switch(c)
-	{
-	    case 'p':	// Enable pre-order sorting
-		pflag = 1;
-		break;
-	    case 'g':	// Enable GUI
-		gflag = 1;
-		break;
-	    case '?':	// Error handling
-	        fprintf(stderr, "Unknown option -%c\n", optopt);
-		abort();
-	    default:	// Something really weird happened
-		abort();
-	}
+        switch(c)
+        {
+            case 'p':	// Enable pre-order sorting
+                pflag = 1;
+                break;
+            case 'g':	// Enable GUI
+                gflag = 1;
+                break;
+            case '?':	// Error handling
+                fprintf(stderr, "Unknown option -%c\n", optopt);
+                abort();
+            default:	// Something really weird happened
+                abort();
+        }
     }
 
     // Read in data from du
@@ -534,54 +550,45 @@ int main(int argc, char **argv) {
     read_entries(stdin);
 
     if (n_entries == 0)
-	return 0;
+        return 0;
 
     // default: post order
     if(pflag == 0)
     {
-	status("Building tree: Post-Order.");
+        status("Building tree: Post-Order.");
   
         base_depth = entries[n_entries - 1].n_components; 
-	build_tree_postorder(0, n_entries - 1, entries[0].n_components - 1);
+        build_tree_postorder(0, n_entries - 1, entries[0].n_components - 1);
 
-	status("Rendering tree.");
-	// display ascii or gui
-	if(gflag == 0)
-	{
-	    showEntriesNew(entries, n_entries);
-	}
-	else if(gflag == 1)
-	{
-	    gui(argc, argv);
-	}
+        status("Rendering tree.");
+        // display ascii or gui
+        if(gflag == 0)
+            show_entries(&entries[n_entries - 1]);
+        else if(gflag == 1)
+            gui(argc, argv);
     }
     // pre order
     else if(pflag == 1)
     {
-	status("Sorting entries.");
-	qsort(entries, n_entries, sizeof(entries[0]), compare_entries);
+        status("Sorting entries.");
+        qsort(entries, n_entries, sizeof(entries[0]), compare_entries);
 
-	status("Building tree: Pre-Order.");
-	if(entries[0].n_components == 0)
+        status("Building tree: Pre-Order.");
+        if(entries[0].n_components == 0)
         {
-	    fprintf(stderr, "Mysterious zero-length entry in table.\n");
-	    exit(1);
+            fprintf(stderr, "Mysterious zero-length entry in table.\n");
+            exit(1);
         }
 
-	base_depth = entries[0].n_components;
-	build_tree_preorder(0, n_entries, 0);
+        base_depth = entries[0].n_components;
+        build_tree_preorder(0, n_entries, 0);
 
-	status("Rendering tree.");
-	// display ascii or gui
-	if(gflag == 0)
-	{
-	    show_entries(&entries[0]);	
-	}
+        status("Rendering tree.");
+        // display ascii or gui
+        if(gflag == 0)
+            show_entries(&entries[0]);	
 	else if(gflag == 1)
-	{
-	    gui(argc, argv);
-	}
+            gui(argc, argv);    
     }
-    
     return(0); 
 }
