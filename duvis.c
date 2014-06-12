@@ -438,7 +438,7 @@ static void draw_nodes(cairo_t *cr, struct entry *e, int recW,
         
         /* Height Coordinate of next child */
         mod = e->children[i]->size / parSize;
-        tempHeight = winHeight * mod;
+        tempHeight = height * mod;
         recH += tempHeight;
     }
 }
