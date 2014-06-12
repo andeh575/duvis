@@ -389,7 +389,7 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
     char sizeStr[21];
 
     /* Center the text in this rectangle */
-    int txtX = x + width / 2; 
+    int txtX = x + width / 8; 
     int txtY = y + height / 2;
 
     /* Copy uint64_t into char buffer */
@@ -399,12 +399,15 @@ static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int
     cairo_rectangle(cr, x, y, width, height);
     cairo_stroke(cr);
 
-    /* Draw the label */
-    cairo_move_to(cr, txtX, txtY);
-    cairo_show_text(cr, e->components[e->n_components - 1]);
-    cairo_show_text(cr, " (");
-    cairo_show_text(cr, sizeStr);
-    cairo_show_text(cr, ")");
+    /* Ensure the rectangle is 'large' enough to read text */
+    if(height > 15) {
+        /* Draw the label */
+        cairo_move_to(cr, txtX, txtY);
+        cairo_show_text(cr, e->components[e->n_components - 1]);
+        cairo_show_text(cr, " (");
+        cairo_show_text(cr, sizeStr);
+        cairo_show_text(cr, ")");
+    }
 }
 
 static void draw_nodes(cairo_t *cr, struct entry *e, int recW, 
@@ -501,8 +504,8 @@ int gui(int argv, char **argc) {
 
     /* Put the drawing surface 'inside' the window */
     gtk_container_add(GTK_CONTAINER(window), darea);
-
-    /* Functionality handling - drawing and exiting */
+    
+    /* Create signals for interacting with the window */
     g_signal_connect(G_OBJECT(darea), "draw", G_CALLBACK(on_draw_event), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
