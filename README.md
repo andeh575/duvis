@@ -22,8 +22,8 @@ are a couple of reasons for replacing `xdu`:
    to my normal task: finding things to archive or delete
    from large systems.
 
-The `duvis` visualization is produced quickly, is ASCII, and
-works acceptably well for its target use case.
+The standard `duvis` visualization is produced quickly, is ASCII, 
+and works acceptably well for its target use case.
 
 ## Usage
 
@@ -39,6 +39,16 @@ The output of `duvis` is the paths that were input, with
 only the last component shown except at the root, indented
 according to nesting depth, and sorted at each level by
 decreasing size, with ties broken alphabetically.
+
+## Dependencies
+
+In order to properly display any graphical portion of `duvis`
+it it necessary to install the following packages:
+
+1. GTK+-3.0: libgtk-3-dev
+2. Cairo: cairo2-dev
+
+GTK is the backend utilized by Cairo to draw all graphics.
 
 ## License
 
