@@ -21,14 +21,14 @@
 #include "duvis.h"
 #include "pathmem.h"
 
-#define IO_BUFFER_LENGTH(1024 * 1024)
+#define IO_BUFFER_LENGTH (1024 * 1024)
 
 int n_entries = 0;
-int max_entries = 0;
+struct entry *entries = 0;
 struct entry *root_entry;
 int base_depth = 0;	/* Component length of initial prefix */
 
-void read_entries(FILE *f) {
+static void read_entries(FILE *f, int zeroflag) {
     int max_entries = 0;
     int line_number = 0;
     
@@ -42,10 +42,13 @@ void read_entries(FILE *f) {
         }
 
         /* Read the next line. */
-        path[du_buffer_length - 1] = '\0';
+        path[DU_BUFFER_LENGTH - 1] = '\0';
         errno = 0;
 
-        int nchars = path_get(path, DU_BUFFER_LENGTH, f ,zeroflag);
+       int nchars = path_get(path, DU_BUFFER_LENGTH, f ,zeroflag);
+
+        if (nchars == -1)
+            fprintf(stderr, "line %d: path buffer overrun\n", line_number + 1);
 
         if (nchars == 0) {
             entries = realloc(entries, n_entries * sizeof(entries[0]));
@@ -326,7 +329,7 @@ void show_entries(struct entry *e) {
         show_entries(e->children[i]);
 }
 
-void showEntriesNew(struct entry e[], int n) {
+void show_entries_raw(struct entry e[], int n) {
     uint32_t depth = 0;
     uint32_t offset = 0;
 
@@ -340,193 +343,119 @@ void showEntriesNew(struct entry e[], int n) {
     } 
 }
 
-void status(char *msg) {
+static void status(char *msg) {
     static int pass = 1;
     fprintf(stderr, "(%d) %s\n", pass++, msg);
 } 
 
+#ifdef DEBUG
 /*
- *  Helper/testing function for displaying a simplified order
- *  that entries are currently in - formatted for directory
- *  view. Includes information about the size.
+ *  Helper/testing function for displaying detailed information
+ *  about entries that have been read in from du
  */ 
-void dispEntries(struct entry e[], int n) {
-    printf("Simple Entries\n# of Entries: %d\n\n", n);
+static void dispEntryDetail(struct entry e[], int n) {
+    printf("Detailed Entries\n# of Entries: %d\n\n", n);
 
     for(int i = 0; i < n; i++) {
+        printf("Index: %d\n", i);
+        printf("Size: %" PRIu64 "\n", e[i].size);        
+        printf("Depth: %d\n", e[i].depth);
+        print("# Children: %d\n", e[i].n_children);
+        print("# Components: %d\n", e[i].n_components);
+        printf("Components: \n");
+
         if(e[i].n_components) {
             for(int j = 0; j < e[i].n_components; j++) {
                 printf("%s/", e[i].components[j]);
-                printf(" ,%" PRIu64 "\n", e[i].size);
+            }
+        }
+       
+        printf("\n");
+    }
+}
+
+/*
+ * Helper/testing function for displaying a simplified order
+ * that entries are currently in - formatted for directory 
+ * view. Includes information about the size.
+ */
+static void dispEntries(struct entry e[], int n) {
+    printf("Simple Entries\n# of Entries: %d\n\n", n);
+
+    for(int i = 0; i < n; i++) {
+        if(e[i].components) {
+            for(int j = 0; j < e[i].n_components; j++) {
+                printf("%s/", e[i].components[j]);
+                printf(" ," PRIu64 "\n", e[i].size);
             }
         }
     }
 }
 
-static void draw_node(cairo_t *cr, struct entry *e, int x, int y, int width, int height) {
+#endif
 
-    /* Length of 2**64 - 1, +1 for null */
-    char sizeStr[21];
-
-    /* Center the text in this rectangle */
-    int txtX = x + width / 8; 
-    int txtY = y + height / 2;
-
-    /* Copy uint64_t into char buffer */
-    sprintf(sizeStr, "%" PRIu64, e->size);
-
-    /* Draw the rectangle container */
-    cairo_rectangle(cr, x, y, width, height);
-    cairo_stroke(cr);
-
-    /* Ensure the rectangle is 'large' enough to read text */
-    if(height > 15) {
-        /* Draw the label */
-        cairo_move_to(cr, txtX, txtY);
-        cairo_show_text(cr, e->components[e->n_components - 1]);
-        cairo_show_text(cr, " (");
-        cairo_show_text(cr, sizeStr);
-        cairo_show_text(cr, ")");
-    }
-}
-
-static void draw_nodes(cairo_t *cr, struct entry *e, int recW, 
-                       int recH, double winWidth, double winHeight, float pSize)
-{
-    uint32_t depth = e->depth;
-    float mod = 1;
-    int width = winWidth;
-    int height = winHeight;
-    float parSize = pSize;
-
-    /* Computing the root node initializes the rest of this algorithm */
-    if(depth == 0) {
-        width = 100;
-        parSize = e->size;
-        height = winHeight;
-        draw_node(cr, e, recW, recH, width, height);
-    }
-    else {
-        mod = e->size / parSize;
-        height = height * mod;
-        draw_node(cr, e, recW, recH, width, height);
-    }
-
-    recW += width;
-    int tempHeight = 0;
-
-    /* Start drawing children */
-    for(int i = 0; i < e->n_children; i++) {
-        draw_nodes(cr, e->children[i], recW, recH, width, height, parSize);
-        
-        /* Height Coordinate of next child */
-        mod = e->children[i]->size / parSize;
-        tempHeight = height * mod;
-        recH += tempHeight;
-    }
-}
-
-/* Perform the actual drawing of the entries */
-static void do_drawing(GtkWidget *widget, cairo_t *cr) {
-
-    /* How much space was the window actually allocated? */
-    GtkAllocation *allocation = g_new0 (GtkAllocation, 1);
-    gtk_widget_get_allocation(GTK_WIDGET(widget), allocation);
-
-    /* Make sure that cairo is aware of the dimensions of the drawing surface */
-    double winWidth = allocation->width;
-    double winHeight = allocation->height;
-
-    /* Allocation no longer needed */
-    g_free(allocation);
-   
-    /* Set cairo drawing variables */
-    cairo_set_source_rgb(cr, 0, 0, 0);
-    cairo_select_font_face(cr, "Helvetica", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 10);
-    cairo_set_line_width(cr, 1);
-    cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
-
-    /* Keep track of parent size to properly scale children */
-    float pSize = 0;
-
-    /* Draw entries, starting with the root node - depends on sort */
-    if(entries[0].size > entries[n_entries - 1].size)
-    {
-        pSize = (float)entries[0].size;
-        draw_nodes(cr, &entries[0], 0, 0, winWidth, winHeight, pSize);
-    }
-    else
-    {
-        pSize = (float)entries[n_entries - 1].size;       
-        draw_nodes(cr, &entries[n_entries - 1], 0, 0, winWidth, winHeight, pSize);     
-    }
-}
-
-/* Call up the cairo functionality */
-static gboolean on_draw_event(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
-   
-    do_drawing(widget, cr);
-
-    return FALSE;
-}
-
-/* Initialize the window, drawing surface, and functionality */
-int gui(int argv, char **argc) {
-
-    GtkWidget *window;
-    GtkWidget *darea;
-
-    /* Initialize GTK, the window, and the drawing surface */
-    gtk_init(&argv, &argc); 
-    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    darea = gtk_drawing_area_new();
-
-    /* Put the drawing surface 'inside' the window */
-    gtk_container_add(GTK_CONTAINER(window), darea);
-    
-    /* Create signals for interacting with the window */
-    g_signal_connect(G_OBJECT(darea), "draw", G_CALLBACK(on_draw_event), NULL);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
-
-    /* Default window settings */
-    gtk_window_set_title(GTK_WINDOW(window), "Duvis");
-    gtk_window_set_default_size(GTK_WINDOW(window), 600, 480);
-    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
-
-    /* Display the window */
-    gtk_widget_show_all(window);
-    gtk_main();
-
-    return (0);
-}
+static char *iobuf;
 
 int main(int argc, char **argv) {
 
     int c;
-    int pflag = 0, gflag = 0;
+    int pflag = 0, gflag = 0, rflag = 0, zeroflag = 0;
+    FILE *inf = stdin;
 
-    while((c = getopt(argc, argv, "pg")) != -1)
+    while((c = getopt(argc, argv, "pgr0")) != -1)
     {
-        switch(c)
-        {
-            case 'p':	// Enable pre-order sorting
+        switch(c) {
+            case 'p':// Enable pre-order sorting
                 pflag = 1;
                 break;
-            case 'g':	// Enable GUI
+            case 'g':// Enable GUI
                 gflag = 1;
                 break;
-            case '?':	// Error handling
+            case 'r':// Enable GUI
+                rflag = 1;
+                break;
+            case '0':// Enable GUI
+                zeroflag = 1;
+                break;
+            case '?':// Error handling
                 fprintf(stderr, "Unknown option -%c\n", optopt);
-                abort();
-            default:	// Something really weird happened
+                exit(1);
+            default:// Something really weird happened
                 abort();
         }
+    }
+    
+    if (optind < argc) {
+        if (optind < argc - 1) {
+            fprintf(stderr, "extra argument(s)\n");
+            exit(1);
+        }
+        fprintf(stderr, "open %s\n", argv[optind]);
+        inf = fopen(argv[optind], "r");
+        if (!inf) {
+            perror("fopen");
+            exit(1);
+        }
+    }
+
+    // Set up for large IOs
+    iobuf = malloc(IO_BUFFER_LENGTH);
+    
+    if (!iobuf) {
+        perror("malloc(iobuf)");
+        exit(1);
+    }
+    
+    int result = setvbuf(inf, iobuf, _IOFBF, IO_BUFFER_LENGTH);
+    
+    if (result) {
+        perror("setvbuf");
+        exit(1);
     }
 
     // Read in data from du
     status("Parsing du file.");
-    read_entries(stdin);
+    read_entries(inf, zeroflag);
 
     if (n_entries == 0)
         return 0;
@@ -534,40 +463,41 @@ int main(int argc, char **argv) {
     // default: post order
     if(pflag == 0)
     {
-        status("Building tree: Post-Order.");
-  
-        base_depth = entries[n_entries - 1].n_components; 
-        build_tree_postorder(0, n_entries - 1, entries[0].n_components - 1);
-
-        status("Rendering tree.");
-        // display ascii or gui
-        if(gflag == 0)
-            show_entries(&entries[n_entries - 1]);
-        else if(gflag == 1)
-            gui(argc, argv);
     }
+    
     // pre order
-    else if(pflag == 1)
-    {
+    if(pflag) {
         status("Sorting entries.");
         qsort(entries, n_entries, sizeof(entries[0]), compare_entries);
 
-        status("Building tree: Pre-Order.");
-        if(entries[0].n_components == 0)
-        {
+        if(entries[0].n_components == 0) {
             fprintf(stderr, "Mysterious zero-length entry in table.\n");
             exit(1);
         }
 
-        base_depth = entries[0].n_components;
+        status("Building tree (preorder).");
+        root_entry = &entries[0];
+        base_depth = root_entry->n_components;
         build_tree_preorder(0, n_entries, 0);
-
-        status("Rendering tree.");
-        // display ascii or gui
-        if(gflag == 0)
-            show_entries(&entries[0]);	
-	else if(gflag == 1)
-            gui(argc, argv);    
+    } else {
+        status("Building tree (postorder).");
+        root_entry = &entries[n_entries - 1];
+        base_depth = root_entry->n_components;
+        build_tree_postorder(0, n_entries, 0);
     }
+
+    if (gflag) {
+        status("Recording depths.");
+        find_max_depths(root_entry);
+        status("Rendering tree.");
+        gui(argc, argv);
+    } else if (rflag) {
+        status("Emitting entries.");
+        show_entries_raw(entries, n_entries);
+    } else {
+        status("Emitting tree.");
+        show_entries(root_entry);
+    }
+    
     return(0); 
 }
