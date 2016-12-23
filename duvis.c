@@ -394,6 +394,17 @@ static void dispEntries(struct entry e[], int n) {
 
 #endif
 
+int find_max_depths(struct entry *e) {
+    int max_depth = 0;
+    for (int i = 0; i < e->n_children; i++) {
+        struct entry *c = e->children[i];
+        find_max_depths(c);
+        if (c->max_depth > max_depth)
+            max_depth = c->max_depth;
+    }
+    return max_depth + 1;
+}
+
 static char *iobuf;
 
 int main(int argc, char **argv) {
