@@ -18,84 +18,47 @@
 /* For command line variables */
 #include <getopt.h>
 
-/* For GUI - with backend */
-#include <cairo.h>
-#include <gtk/gtk.h>
+#include "duvis.h"
+#include "pathmem.h"
 
-/* Number of entries to consider "largest small". */
-#define DU_INIT_ENTRIES_SIZE (128 * 1024)
-
-/* For portability. */
-#define DU_PATH_MAX 4096
-#define DU_COMPONENTS_MAX DU_PATH_MAX
-
-/* Number of spaces of indent per level. */
-#define N_INDENT 2
-
-struct entry {
-    uint64_t size;		
-    uint32_t n_components;	// # of components that makeup this entry
-    char *path;   		// for later free 
-    char **components;		// The actual components of this entry
-    uint32_t depth;		// The depth of this entry in the directory tree
-    uint32_t n_children;	// # of children directories at this entry level
-    struct entry **children;	// Children entries of this entry
-};
+#define IO_BUFFER_LENGTH(1024 * 1024)
 
 int n_entries = 0;
 int max_entries = 0;
-struct entry *entries = 0;
+struct entry *root_entry;
+int base_depth = 0;	/* Component length of initial prefix */
 
 void read_entries(FILE *f) {
+    int max_entries = 0;
     int line_number = 0;
-    /* Size field is at most 2**64 bytes, but in kB.
-     * Thus max digits in 64-bit size is
-     *   ceil(log10(2**64 / 1024)) = 17
-     * Buffer is size field + separator + "./" + path + newline.
-     */
-    int du_buffer_length = 17 + 1 + (2 + DU_PATH_MAX) + 1;
-    /* Loop reading lines from the du file and processing them. */
+    
     while (1) {
         /* Get a buffer for the line data. */
-        char *path = malloc(du_buffer_length);
+        char *path = path_alloc();
+
         if (!path) {
             perror("malloc");
             exit(1);
         }
+
         /* Read the next line. */
         path[du_buffer_length - 1] = '\0';
         errno = 0;
-        char *result = fgets(path, du_buffer_length, f);
-        if (!result) {
-            if (errno != 0) {
-                perror("fgets");
-                exit(1);
-            }
-            free(path);
+
+        int nchars = path_get(path, DU_BUFFER_LENGTH, f ,zeroflag);
+
+        if (nchars == 0) {
             entries = realloc(entries, n_entries * sizeof(entries[0]));
+            
             if (!entries) {
                 perror("realloc");
                 exit(1);
             }
             return;
         }
+
         line_number++;
-        if (path[du_buffer_length - 1] != '\0') {
-            if (path[du_buffer_length - 1] == '\n')
-                path[du_buffer_length - 1] = '\0';
-            fprintf(stderr, "line %d: buffer overrun\n", line_number);
-            exit(1);
-        }
-        /*
-         * Don't leak a ton of data on each path. The size
-         * field and separator and newline are still leaked.
-         * C'est la vie.
-         */
-        path = realloc(path, strlen(path) + 1);
-        if (!path) {
-            perror("realloc");
-            exit(1);
-        }
+
         /* Allocate a new entry for the line. */
         while (n_entries >= max_entries) {
             if (max_entries == 0)
@@ -108,25 +71,32 @@ void read_entries(FILE *f) {
                 exit(1);
             }
         }
+
         struct entry *entry = &entries[n_entries++];
         entry->path = path;
         entry->n_children = 0;
         entry->children = 0;
+
         /* Start to parse the line. */
         char *index = path;
+
         while (isdigit(*index))
             index++;
+
         if (index == path || (*index != ' ' && *index != '\t')) {
             fprintf(stderr, "line %d: buffer format error\n", line_number);
             exit(1);
         }
+
         /* Parse the size field. */
         *index++ = '\0';
         int n_scanned = sscanf(path, "%" PRIu64, &entry->size);  //Should be: PRIu64
+
         if (n_scanned != 1) {
             fprintf(stderr, "line %d: size parse failure\n", line_number);
             exit(1);
         }
+
         /*
          * Parse the path. Note that we don't skip extra separator
          * chars, on the off chance that there's a leading path that
@@ -134,12 +104,15 @@ void read_entries(FILE *f) {
          */
         entry->components =
             malloc(DU_COMPONENTS_MAX * sizeof(entry->components[0]));
+
         if (!entry->components) {
             perror("malloc");
             exit(1);
         }
+
         entry->components[0] = index;
         entry->n_components = 1;
+
         while (1) {
             if (*index == '\n' || *index == '\0') {
                 *index = '\0';
@@ -154,10 +127,12 @@ void read_entries(FILE *f) {
                 index++;
             }
         }
+
         /* Don't leak a ton of data on each entry. */
         entry->components =
             realloc(entry->components,
                     entry->n_components * sizeof(entry->components[0]));
+
         if (!entry->components) {
             perror("realloc");
             exit(1);
@@ -165,9 +140,6 @@ void read_entries(FILE *f) {
     }
     assert(0);
 }
-
-/* Component length of initial prefix. */
-uint32_t base_depth = 0;
 
 /*
  * Priorities for sort:
@@ -179,13 +151,16 @@ int compare_entries(const void *p1, const void * p2) {
     const struct entry *e2 = p2;
     int n1 = e1->n_components;
     int n2 = e2->n_components;
+
     for (int i = 0; i < n1 && i < n2; i++) {
         int q = strcmp(e1->components[i], e2->components[i]);
         if (q != 0)
             return q;
     }
+
     if (n1 != n2)
         return (n1 - n2);
+
     assert(0);
 }
 
@@ -209,14 +184,19 @@ int compare_subtrees(const void *p1, const void * p2) {
     int s1 = (*e1)->size;
     int s2 = (*e2)->size;
     int q = compare_sizes(s2, s1);
+
     if (q != 0)
         return q;
+
     assert((*e1)->depth == (*e2)->depth);
     int depth = (*e1)->depth;
+
     q = strcmp((*e1)->components[depth + base_depth - 1],
                (*e2)->components[depth + base_depth - 1]);
+
     if (q != 0)
         return q;
+
     assert(0);
 }
 
